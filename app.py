@@ -206,7 +206,7 @@ if "access_idx" in gdf.columns:
 st.markdown("---")
 
 # =========================================================
-# MAP (NO TOKEN, BASEMAP GUARANTEED)
+# MAP
 # =========================================================
 st.subheader("🗺️ Retail Expansion Map")
 
