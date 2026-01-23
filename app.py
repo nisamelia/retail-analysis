@@ -1,8 +1,8 @@
+import os
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
 import pydeck as pdk
-import plotly.express as px
 from pathlib import Path
 
 # =========================================================
@@ -12,9 +12,12 @@ st.set_page_config(
     page_title="Retail Expansion Score Dashboard",
     page_icon="🏪",
     layout="wide"
-    
 )
 
+# Mapbox token
+os.environ["MAPBOX_API_KEY"] = st.secrets["MAPBOX_API_KEY"]
+
+# GitHub link (high visibility)
 st.markdown(
     "🔗 **Source code:** "
     "[github.com/nisamelia/retail-expansion]"
@@ -22,7 +25,7 @@ st.markdown(
 )
 
 # =========================================================
-# LOAD DATA (OPTIMIZED, SAFE)
+# LOAD DATA
 # =========================================================
 @st.cache_data
 def load_grid_data(file_path, simplify_tol):
@@ -31,20 +34,20 @@ def load_grid_data(file_path, simplify_tol):
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # 🔥 Geometry simplify (KEY PERFORMANCE)
+    # Geometry simplify (performance key)
     gdf["geometry"] = gdf.geometry.simplify(
         tolerance=simplify_tol,
         preserve_topology=True
     )
 
-    # Representative point (faster than centroid)
+    # Representative point
     rp = gdf.geometry.representative_point()
     gdf["lon"] = rp.x
     gdf["lat"] = rp.y
 
-    # Precompute polygon coordinates (ONCE)
+    # Precompute polygon coordinates
     gdf["coordinates"] = gdf.geometry.apply(
-        lambda geom: [[[x, y] for x, y in geom.exterior.coords]]
+        lambda g: [[[x, y] for x, y in g.exterior.coords]]
     )
 
     return gdf
@@ -96,7 +99,6 @@ full_detail = st.sidebar.checkbox(
     value=False
 )
 
-# Geometry tolerance control
 simplify_tol = 0.0001 if full_detail else 0.0003
 
 uploaded_file = st.sidebar.file_uploader(
@@ -123,34 +125,58 @@ else:
     landuse_col = None
 
 # =========================================================
-# FILTERS
+# FILTERS (DEFAULT: High Retail & Low Flood)
 # =========================================================
 st.sidebar.subheader("🔍 Filters")
 
+# Retail Class
 if "retail_class" in gdf.columns:
     rc = ["All"] + sorted(gdf["retail_class"].dropna().unique())
-    sel = st.sidebar.selectbox("Retail Class", rc)
-    if sel != "All":
-        gdf = gdf[gdf["retail_class"] == sel]
+    default_rc = rc.index("High") if "High" in rc else 0
 
+    sel_rc = st.sidebar.selectbox(
+        "Retail Class",
+        rc,
+        index=default_rc
+    )
+
+    if sel_rc != "All":
+        gdf = gdf[gdf["retail_class"] == sel_rc]
+
+# Flood Class
 if "flood_class" in gdf.columns:
     fc = ["All"] + sorted(gdf["flood_class"].dropna().unique())
-    sel = st.sidebar.selectbox("Flood Class", fc)
-    if sel != "All":
-        gdf = gdf[gdf["flood_class"] == sel]
 
+    preferred = (
+        "Low" if "Low" in fc
+        else "Low Risk" if "Low Risk" in fc
+        else "All"
+    )
+
+    default_fc = fc.index(preferred)
+
+    sel_fc = st.sidebar.selectbox(
+        "Flood Class",
+        fc,
+        index=default_fc
+    )
+
+    if sel_fc != "All":
+        gdf = gdf[gdf["flood_class"] == sel_fc]
+
+# Landuse
 if landuse_col:
     lu = ["All"] + sorted(gdf[landuse_col].dropna().unique())
-    sel = st.sidebar.selectbox(landuse_col, lu)
-    if sel != "All":
-        gdf = gdf[gdf[landuse_col] == sel]
+    sel_lu = st.sidebar.selectbox("Land Use", lu)
+    if sel_lu != "All":
+        gdf = gdf[gdf[landuse_col] == sel_lu]
 
 # =========================================================
 # MAIN
 # =========================================================
 st.title("🏪 Grid Retail Expansion Score Dashboard")
 st.markdown(
-    "Grid-based retail expansion analysis using dasymetric population modeling"
+    "Default view highlights **high retail potential** areas with **low flood risk**."
 )
 st.markdown("---")
 
@@ -178,7 +204,6 @@ st.markdown("---")
 # =========================================================
 st.subheader("🗺️ Retail Expansion Map")
 
-
 viz_mode = st.radio(
     "Visualization Mode",
     ["Retail Class", "Retail Score"],
@@ -196,13 +221,38 @@ else:
         lambda x: get_color_scale(x, vmin, vmax)
     )
 
-# PyDeck Polygon Layer (ULTRA LIGHT)
+# =========================================================
+# FULL TOOLTIP
+# =========================================================
+tooltip_html = "<b>Grid ID:</b> {gid}<br/>"
+
+label_map = {
+    "retail_class": "Retail Class",
+    "retail_score": "Retail Score",
+    landuse_col: "Land Use",
+    "pop_dasymetric": "Population",
+    "flood_class": "Flood Class",
+    "flood_risk_idx": "Flood Risk Index",
+    "demand_idx": "Demand Index",
+    "access_idx": "Access",
+    "akses_jalan_utama": "Main Road Access",
+    "akses_jalan_arteri": "Arterial Road Access",
+    "akses_jalan_kolektor": "Collector Road Access"
+}
+
+for col, label in label_map.items():
+    if col and col in gdf_plot.columns:
+        tooltip_html += f"<b>{label}:</b> {{{col}}}<br/>"
+
+# =========================================================
+# PYDECK MAP
+# =========================================================
 layer = pdk.Layer(
     "PolygonLayer",
     data=gdf_plot,
     get_polygon="coordinates",
     get_fill_color="fill_color",
-    stroked=False,        # 🔥 NO BORDER
+    stroked=False,
     filled=True,
     extruded=False,
     pickable=True,
@@ -220,7 +270,14 @@ deck = pdk.Deck(
     initial_view_state=view,
     map_style="mapbox://styles/mapbox/light-v10",
     tooltip={
-        "html": "<b>ID:</b> {gid}<br><b>Score:</b> {retail_score:.3f}"
+        "html": tooltip_html,
+        "style": {
+            "backgroundColor": "rgba(0,0,0,0.8)",
+            "color": "white",
+            "fontSize": "11px",
+            "padding": "8px",
+            "borderRadius": "4px"
+        }
     }
 )
 
