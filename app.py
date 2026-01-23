@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 st.markdown(
-    "🔗 **Source code:** "
+    "🔗 **Data pipeline:** "
     "[github.com/nisamelia/retail-expansion]"
     "(https://github.com/nisamelia/retail-expansion)"
 )
