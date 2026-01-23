@@ -13,7 +13,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Repo link (biar langsung kelihatan)
 st.markdown(
     "🔗 **Source code:** "
     "[github.com/nisamelia/retail-expansion]"
@@ -21,7 +20,7 @@ st.markdown(
 )
 
 # =========================================================
-# LOAD DATA (OPTIMIZED)
+# LOAD DATA (OPTIMIZED & SAFE)
 # =========================================================
 @st.cache_data
 def load_grid_data(file_path, simplify_tol):
@@ -30,18 +29,15 @@ def load_grid_data(file_path, simplify_tol):
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # Simplify geometry (speed-up rendering)
     gdf["geometry"] = gdf.geometry.simplify(
         tolerance=simplify_tol,
         preserve_topology=True
     )
 
-    # Representative point (lebih cepat dari centroid)
     rp = gdf.geometry.representative_point()
     gdf["lon"] = rp.x
     gdf["lat"] = rp.y
 
-    # Precompute polygon coordinates (PyDeck friendly)
     gdf["coordinates"] = gdf.geometry.apply(
         lambda geom: [[[x, y] for x, y in geom.exterior.coords]]
     )
@@ -121,45 +117,36 @@ else:
     landuse_col = None
 
 # =========================================================
-# FILTERS (DEFAULT: HIGH + LOW FLOOD)
+# FILTERS (ALL TETAP TAMPIL)
 # =========================================================
 st.sidebar.subheader("🔍 Filters")
 
-# Retail class
+# Retail Class
 if "retail_class" in gdf.columns:
-    rc_options = sorted(gdf["retail_class"].dropna().unique())
-    selected_rc = st.sidebar.selectbox(
-        "Retail Class",
-        rc_options,
-        index=rc_options.index("High") if "High" in rc_options else 0
-    )
-    gdf = gdf[gdf["retail_class"] == selected_rc]
+    rc_options = ["All"] + sorted(gdf["retail_class"].dropna().unique())
+    selected_rc = st.sidebar.selectbox("Retail Class", rc_options)
+    if selected_rc != "All":
+        gdf = gdf[gdf["retail_class"] == selected_rc]
 
-# Flood class
+# Flood Class
 if "flood_class" in gdf.columns:
-    fc_options = sorted(gdf["flood_class"].dropna().unique())
-    default_fc = "Low" if "Low" in fc_options else fc_options[0]
-    selected_fc = st.sidebar.selectbox(
-        "Flood Class",
-        fc_options,
-        index=fc_options.index(default_fc)
-    )
-    gdf = gdf[gdf["flood_class"] == selected_fc]
+    fc_options = ["All"] + sorted(gdf["flood_class"].dropna().unique())
+    selected_fc = st.sidebar.selectbox("Flood Class", fc_options)
+    if selected_fc != "All":
+        gdf = gdf[gdf["flood_class"] == selected_fc]
 
 # Landuse
 if landuse_col:
     lu_options = ["All"] + sorted(gdf[landuse_col].dropna().unique())
-    sel_lu = st.sidebar.selectbox(landuse_col, lu_options)
-    if sel_lu != "All":
-        gdf = gdf[gdf[landuse_col] == sel_lu]
+    selected_lu = st.sidebar.selectbox(landuse_col, lu_options)
+    if selected_lu != "All":
+        gdf = gdf[gdf[landuse_col] == selected_lu]
 
 # =========================================================
 # MAIN
 # =========================================================
 st.title("🏪 Grid Retail Expansion Score Dashboard")
-st.markdown(
-    "Grid-based retail expansion analysis using dasymetric population modeling"
-)
+st.markdown("Grid-based retail expansion analysis using dasymetric population modeling")
 st.markdown("---")
 
 # =========================================================
@@ -170,8 +157,7 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total Grids", f"{len(gdf):,}")
 
 if "retail_class" in gdf.columns:
-    high = (gdf["retail_class"] == "High").sum()
-    col2.metric("Retail High", f"{high:,}")
+    col2.metric("Retail High", f"{(gdf['retail_class']=='High').sum():,}")
 
 if "pop_dasymetric" in gdf.columns:
     col3.metric("Total Population", f"{gdf['pop_dasymetric'].sum():,.0f}")
@@ -182,7 +168,7 @@ if "access_idx" in gdf.columns:
 st.markdown("---")
 
 # =========================================================
-# MAP
+# MAP (BASEMAP FIXED)
 # =========================================================
 st.subheader("🗺️ Retail Expansion Map")
 
@@ -204,16 +190,15 @@ else:
 
 # Tooltip lengkap
 tooltip_html = "<b>Grid ID:</b> {gid}<br/>"
-important_cols = [
+cols = [
     "retail_class", "retail_score", landuse_col,
     "pop_dasymetric", "flood_class",
-    "demand_idx", "flood_risk_idx", "access_idx",
-    "akses_jalan_utama", "akses_jalan_arteri", "akses_jalan_kolektor"
+    "demand_idx", "flood_risk_idx", "access_idx"
 ]
-important_cols = [c for c in important_cols if c and c in gdf_plot.columns]
+cols = [c for c in cols if c and c in gdf_plot.columns]
 
-for col in important_cols:
-    tooltip_html += f"<b>{col}:</b> {{{col}}}<br/>"
+for c in cols:
+    tooltip_html += f"<b>{c}:</b> {{{c}}}<br/>"
 
 layer = pdk.Layer(
     "PolygonLayer",
@@ -222,7 +207,6 @@ layer = pdk.Layer(
     get_fill_color="fill_color",
     stroked=False,
     filled=True,
-    extruded=False,
     pickable=True
 )
 
@@ -235,17 +219,8 @@ view = pdk.ViewState(
 deck = pdk.Deck(
     layers=[layer],
     initial_view_state=view,
-    map_style="carto-positron",  # 🔥 NO TOKEN
-    tooltip={
-        "html": tooltip_html,
-        "style": {
-            "backgroundColor": "rgba(0,0,0,0.8)",
-            "color": "white",
-            "fontSize": "11px",
-            "padding": "8px",
-            "borderRadius": "4px"
-        }
-    }
+    map_style=None,  # 🔥 FIX UTAMA: BASEMAP PASTI MUNCUL
+    tooltip={"html": tooltip_html}
 )
 
 st.pydeck_chart(deck, use_container_width=True)
