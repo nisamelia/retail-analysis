@@ -12,6 +12,13 @@ st.set_page_config(
     page_title="Retail Expansion Score Dashboard",
     page_icon="🏪",
     layout="wide"
+    
+)
+
+st.markdown(
+    "🔗 **Source code:** "
+    "[github.com/nisamelia/retail-expansion]"
+    "(https://github.com/nisamelia/retail-expansion)"
 )
 
 # =========================================================
@@ -170,6 +177,7 @@ st.markdown("---")
 # MAP
 # =========================================================
 st.subheader("🗺️ Retail Expansion Map")
+
 
 viz_mode = st.radio(
     "Visualization Mode",
