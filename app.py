@@ -14,13 +14,13 @@ st.set_page_config(
 )
 
 st.markdown(
-    "🔗 **Data pipeline:** "
+    "🔗 **Source code:** "
     "[github.com/nisamelia/retail-expansion]"
     "(https://github.com/nisamelia/retail-expansion)"
 )
 
 # =========================================================
-# LOAD DATA (OPTIMIZED & SAFE)
+# LOAD DATA (OPTIMIZED & DEPLOY-SAFE)
 # =========================================================
 @st.cache_data
 def load_grid_data(file_path, simplify_tol):
@@ -29,15 +29,18 @@ def load_grid_data(file_path, simplify_tol):
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
+    # Geometry simplify (VERY IMPORTANT FOR DEPLOY)
     gdf["geometry"] = gdf.geometry.simplify(
         tolerance=simplify_tol,
         preserve_topology=True
     )
 
+    # Representative point (faster than centroid)
     rp = gdf.geometry.representative_point()
     gdf["lon"] = rp.x
     gdf["lat"] = rp.y
 
+    # Precompute polygon coordinates ONCE
     gdf["coordinates"] = gdf.geometry.apply(
         lambda geom: [[[x, y] for x, y in geom.exterior.coords]]
     )
@@ -117,21 +120,30 @@ else:
     landuse_col = None
 
 # =========================================================
-# FILTERS (ALL TETAP TAMPIL)
+# FILTERS (DEFAULT: HIGH + LOW FLOOD)
 # =========================================================
 st.sidebar.subheader("🔍 Filters")
 
 # Retail Class
 if "retail_class" in gdf.columns:
     rc_options = ["All"] + sorted(gdf["retail_class"].dropna().unique())
-    selected_rc = st.sidebar.selectbox("Retail Class", rc_options)
+    selected_rc = st.sidebar.selectbox(
+        "Retail Class",
+        rc_options,
+        index=rc_options.index("High") if "High" in rc_options else 0
+    )
     if selected_rc != "All":
         gdf = gdf[gdf["retail_class"] == selected_rc]
 
 # Flood Class
 if "flood_class" in gdf.columns:
     fc_options = ["All"] + sorted(gdf["flood_class"].dropna().unique())
-    selected_fc = st.sidebar.selectbox("Flood Class", fc_options)
+    default_fc = "Low" if "Low" in fc_options else "All"
+    selected_fc = st.sidebar.selectbox(
+        "Flood Class",
+        fc_options,
+        index=fc_options.index(default_fc)
+    )
     if selected_fc != "All":
         gdf = gdf[gdf["flood_class"] == selected_fc]
 
@@ -146,7 +158,9 @@ if landuse_col:
 # MAIN
 # =========================================================
 st.title("🏪 Grid Retail Expansion Score Dashboard")
-st.markdown("Grid-based retail expansion analysis using dasymetric population modeling")
+st.markdown(
+    "Grid-based retail expansion analysis using dasymetric population modeling"
+)
 st.markdown("---")
 
 # =========================================================
@@ -168,7 +182,7 @@ if "access_idx" in gdf.columns:
 st.markdown("---")
 
 # =========================================================
-# MAP (BASEMAP FIXED)
+# MAP (NO TOKEN, BASEMAP GUARANTEED)
 # =========================================================
 st.subheader("🗺️ Retail Expansion Map")
 
@@ -180,6 +194,7 @@ viz_mode = st.radio(
 
 gdf_plot = gdf.copy()
 
+# Coloring
 if viz_mode == "Retail Class" and "retail_class" in gdf_plot.columns:
     gdf_plot["fill_color"] = gdf_plot["retail_class"].apply(get_retail_color)
 else:
@@ -188,16 +203,16 @@ else:
         lambda x: get_color_scale(x, vmin, vmax)
     )
 
-# Tooltip lengkap
+# Tooltip (FULL INFO)
 tooltip_html = "<b>Grid ID:</b> {gid}<br/>"
-cols = [
+tooltip_cols = [
     "retail_class", "retail_score", landuse_col,
     "pop_dasymetric", "flood_class",
     "demand_idx", "flood_risk_idx", "access_idx"
 ]
-cols = [c for c in cols if c and c in gdf_plot.columns]
+tooltip_cols = [c for c in tooltip_cols if c and c in gdf_plot.columns]
 
-for c in cols:
+for c in tooltip_cols:
     tooltip_html += f"<b>{c}:</b> {{{c}}}<br/>"
 
 layer = pdk.Layer(
@@ -219,7 +234,7 @@ view = pdk.ViewState(
 deck = pdk.Deck(
     layers=[layer],
     initial_view_state=view,
-    map_style=None,  # 🔥 FIX UTAMA: BASEMAP PASTI MUNCUL
+    map_style=None,  # ← OPENSTREETMAP DEFAULT (NO TOKEN)
     tooltip={"html": tooltip_html}
 )
 
