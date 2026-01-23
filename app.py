@@ -244,7 +244,7 @@ layer = pdk.Layer(
     data=gdf_plot,
     get_polygon="coordinates",
     get_fill_color="fill_color",
-    stroked=False,
+    stroked=True,
     filled=True,
     pickable=True
 )
