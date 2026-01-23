@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
@@ -6,7 +5,7 @@ import pydeck as pdk
 from pathlib import Path
 
 # =========================================================
-# CONFIG
+# PAGE CONFIG (HARUS PALING ATAS)
 # =========================================================
 st.set_page_config(
     page_title="Retail Expansion Score Dashboard",
@@ -14,10 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Mapbox token
-os.environ["MAPBOX_API_KEY"] = st.secrets["MAPBOX_API_KEY"]
-
-# GitHub link (high visibility)
+# Repo link (biar langsung kelihatan)
 st.markdown(
     "🔗 **Source code:** "
     "[github.com/nisamelia/retail-expansion]"
@@ -25,7 +21,7 @@ st.markdown(
 )
 
 # =========================================================
-# LOAD DATA
+# LOAD DATA (OPTIMIZED)
 # =========================================================
 @st.cache_data
 def load_grid_data(file_path, simplify_tol):
@@ -34,20 +30,20 @@ def load_grid_data(file_path, simplify_tol):
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # Geometry simplify (performance key)
+    # Simplify geometry (speed-up rendering)
     gdf["geometry"] = gdf.geometry.simplify(
         tolerance=simplify_tol,
         preserve_topology=True
     )
 
-    # Representative point
+    # Representative point (lebih cepat dari centroid)
     rp = gdf.geometry.representative_point()
     gdf["lon"] = rp.x
     gdf["lat"] = rp.y
 
-    # Precompute polygon coordinates
+    # Precompute polygon coordinates (PyDeck friendly)
     gdf["coordinates"] = gdf.geometry.apply(
-        lambda g: [[[x, y] for x, y in g.exterior.coords]]
+        lambda geom: [[[x, y] for x, y in geom.exterior.coords]]
     )
 
     return gdf
@@ -95,7 +91,7 @@ selected_dataset = st.sidebar.selectbox(
 )
 
 full_detail = st.sidebar.checkbox(
-    "Full Detail Mode (Slower)",
+    "Full Detail Geometry (Slower)",
     value=False
 )
 
@@ -125,49 +121,35 @@ else:
     landuse_col = None
 
 # =========================================================
-# FILTERS (DEFAULT: High Retail & Low Flood)
+# FILTERS (DEFAULT: HIGH + LOW FLOOD)
 # =========================================================
 st.sidebar.subheader("🔍 Filters")
 
-# Retail Class
+# Retail class
 if "retail_class" in gdf.columns:
-    rc = ["All"] + sorted(gdf["retail_class"].dropna().unique())
-    default_rc = rc.index("High") if "High" in rc else 0
-
-    sel_rc = st.sidebar.selectbox(
+    rc_options = sorted(gdf["retail_class"].dropna().unique())
+    selected_rc = st.sidebar.selectbox(
         "Retail Class",
-        rc,
-        index=default_rc
+        rc_options,
+        index=rc_options.index("High") if "High" in rc_options else 0
     )
+    gdf = gdf[gdf["retail_class"] == selected_rc]
 
-    if sel_rc != "All":
-        gdf = gdf[gdf["retail_class"] == sel_rc]
-
-# Flood Class
+# Flood class
 if "flood_class" in gdf.columns:
-    fc = ["All"] + sorted(gdf["flood_class"].dropna().unique())
-
-    preferred = (
-        "Low" if "Low" in fc
-        else "Low Risk" if "Low Risk" in fc
-        else "All"
-    )
-
-    default_fc = fc.index(preferred)
-
-    sel_fc = st.sidebar.selectbox(
+    fc_options = sorted(gdf["flood_class"].dropna().unique())
+    default_fc = "Low" if "Low" in fc_options else fc_options[0]
+    selected_fc = st.sidebar.selectbox(
         "Flood Class",
-        fc,
-        index=default_fc
+        fc_options,
+        index=fc_options.index(default_fc)
     )
-
-    if sel_fc != "All":
-        gdf = gdf[gdf["flood_class"] == sel_fc]
+    gdf = gdf[gdf["flood_class"] == selected_fc]
 
 # Landuse
 if landuse_col:
-    lu = ["All"] + sorted(gdf[landuse_col].dropna().unique())
-    sel_lu = st.sidebar.selectbox("Land Use", lu)
+    lu_options = ["All"] + sorted(gdf[landuse_col].dropna().unique())
+    sel_lu = st.sidebar.selectbox(landuse_col, lu_options)
     if sel_lu != "All":
         gdf = gdf[gdf[landuse_col] == sel_lu]
 
@@ -176,7 +158,7 @@ if landuse_col:
 # =========================================================
 st.title("🏪 Grid Retail Expansion Score Dashboard")
 st.markdown(
-    "Default view highlights **high retail potential** areas with **low flood risk**."
+    "Grid-based retail expansion analysis using dasymetric population modeling"
 )
 st.markdown("---")
 
@@ -189,7 +171,7 @@ col1.metric("Total Grids", f"{len(gdf):,}")
 
 if "retail_class" in gdf.columns:
     high = (gdf["retail_class"] == "High").sum()
-    col2.metric("Retail High", f"{high:,}", f"{high/len(gdf)*100:.1f}%")
+    col2.metric("Retail High", f"{high:,}")
 
 if "pop_dasymetric" in gdf.columns:
     col3.metric("Total Population", f"{gdf['pop_dasymetric'].sum():,.0f}")
@@ -212,7 +194,6 @@ viz_mode = st.radio(
 
 gdf_plot = gdf.copy()
 
-# Coloring
 if viz_mode == "Retail Class" and "retail_class" in gdf_plot.columns:
     gdf_plot["fill_color"] = gdf_plot["retail_class"].apply(get_retail_color)
 else:
@@ -221,32 +202,19 @@ else:
         lambda x: get_color_scale(x, vmin, vmax)
     )
 
-# =========================================================
-# FULL TOOLTIP
-# =========================================================
+# Tooltip lengkap
 tooltip_html = "<b>Grid ID:</b> {gid}<br/>"
+important_cols = [
+    "retail_class", "retail_score", landuse_col,
+    "pop_dasymetric", "flood_class",
+    "demand_idx", "flood_risk_idx", "access_idx",
+    "akses_jalan_utama", "akses_jalan_arteri", "akses_jalan_kolektor"
+]
+important_cols = [c for c in important_cols if c and c in gdf_plot.columns]
 
-label_map = {
-    "retail_class": "Retail Class",
-    "retail_score": "Retail Score",
-    landuse_col: "Land Use",
-    "pop_dasymetric": "Population",
-    "flood_class": "Flood Class",
-    "flood_risk_idx": "Flood Risk Index",
-    "demand_idx": "Demand Index",
-    "access_idx": "Access",
-    "akses_jalan_utama": "Main Road Access",
-    "akses_jalan_arteri": "Arterial Road Access",
-    "akses_jalan_kolektor": "Collector Road Access"
-}
+for col in important_cols:
+    tooltip_html += f"<b>{col}:</b> {{{col}}}<br/>"
 
-for col, label in label_map.items():
-    if col and col in gdf_plot.columns:
-        tooltip_html += f"<b>{label}:</b> {{{col}}}<br/>"
-
-# =========================================================
-# PYDECK MAP
-# =========================================================
 layer = pdk.Layer(
     "PolygonLayer",
     data=gdf_plot,
@@ -255,8 +223,7 @@ layer = pdk.Layer(
     stroked=False,
     filled=True,
     extruded=False,
-    pickable=True,
-    auto_highlight=False
+    pickable=True
 )
 
 view = pdk.ViewState(
@@ -268,7 +235,7 @@ view = pdk.ViewState(
 deck = pdk.Deck(
     layers=[layer],
     initial_view_state=view,
-    map_style="mapbox://styles/mapbox/light-v10",
+    map_style="carto-positron",  # 🔥 NO TOKEN
     tooltip={
         "html": tooltip_html,
         "style": {
