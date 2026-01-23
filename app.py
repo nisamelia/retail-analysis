@@ -29,7 +29,7 @@ def load_grid_data(file_path, simplify_tol):
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # Geometry simplify (VERY IMPORTANT FOR DEPLOY)
+    # Simplify geometry (IMPORTANT for performance)
     gdf["geometry"] = gdf.geometry.simplify(
         tolerance=simplify_tol,
         preserve_topology=True
@@ -120,37 +120,61 @@ else:
     landuse_col = None
 
 # =========================================================
-# FILTERS (DEFAULT: HIGH + LOW FLOOD)
+# FILTERS (DEFAULT: HIGH + LOW FLOOD + PERMUKIMAN)
 # =========================================================
 st.sidebar.subheader("🔍 Filters")
 
 # Retail Class
 if "retail_class" in gdf.columns:
     rc_options = ["All"] + sorted(gdf["retail_class"].dropna().unique())
+    default_rc = "High" if "High" in rc_options else "All"
+
     selected_rc = st.sidebar.selectbox(
         "Retail Class",
         rc_options,
-        index=rc_options.index("High") if "High" in rc_options else 0
+        index=rc_options.index(default_rc)
     )
+
     if selected_rc != "All":
         gdf = gdf[gdf["retail_class"] == selected_rc]
 
 # Flood Class
 if "flood_class" in gdf.columns:
     fc_options = ["All"] + sorted(gdf["flood_class"].dropna().unique())
-    default_fc = "Low" if "Low" in fc_options else "All"
+
+    if "Low" in fc_options:
+        default_fc = "Low"
+    elif "Rendah" in fc_options:
+        default_fc = "Rendah"
+    else:
+        default_fc = "All"
+
     selected_fc = st.sidebar.selectbox(
         "Flood Class",
         fc_options,
         index=fc_options.index(default_fc)
     )
+
     if selected_fc != "All":
         gdf = gdf[gdf["flood_class"] == selected_fc]
 
-# Landuse
+# Landuse / Keterangan
 if landuse_col:
     lu_options = ["All"] + sorted(gdf[landuse_col].dropna().unique())
-    selected_lu = st.sidebar.selectbox(landuse_col, lu_options)
+
+    if "Permukiman" in lu_options:
+        default_lu = "Permukiman"
+    elif "Perumahan" in lu_options:
+        default_lu = "Perumahan"
+    else:
+        default_lu = "All"
+
+    selected_lu = st.sidebar.selectbox(
+        landuse_col,
+        lu_options,
+        index=lu_options.index(default_lu)
+    )
+
     if selected_lu != "All":
         gdf = gdf[gdf[landuse_col] == selected_lu]
 
@@ -234,7 +258,7 @@ view = pdk.ViewState(
 deck = pdk.Deck(
     layers=[layer],
     initial_view_state=view,
-    map_style=None,  # ← OPENSTREETMAP DEFAULT (NO TOKEN)
+    map_style=None,  # ← OpenStreetMap default (NO TOKEN)
     tooltip={"html": tooltip_html}
 )
 
