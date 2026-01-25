@@ -102,20 +102,20 @@ full_detail = st.sidebar.checkbox(
 
 simplify_tol = 0.0001 if full_detail else 0.0003
 
-uploaded_file = st.sidebar.file_uploader(
-    "Or upload your own file",
-    type=["gpkg", "geojson", "shp"]
-)
+# uploaded_file = st.sidebar.file_uploader(
+#     "Or upload your own file",
+#     type=["gpkg", "geojson", "shp"]
+# )
 
-if uploaded_file:
-    temp = Path("temp_upload.gpkg")
-    with open(temp, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    gdf = load_grid_data(temp, simplify_tol)
-    dataset_name = uploaded_file.name
-else:
-    gdf = load_grid_data(data_files[selected_dataset], simplify_tol)
-    dataset_name = selected_dataset
+# if uploaded_file:
+#     temp = Path("temp_upload.gpkg")
+#     with open(temp, "wb") as f:
+#         f.write(uploaded_file.getbuffer())
+#     gdf = load_grid_data(temp, simplify_tol)
+#     dataset_name = uploaded_file.name
+# else:
+#     gdf = load_grid_data(data_files[selected_dataset], simplify_tol)
+#     dataset_name = selected_dataset
 
 # Detect landuse column
 if "Keterangan" in gdf.columns:
