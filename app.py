@@ -19,6 +19,12 @@ st.markdown(
     "(https://github.com/nisamelia/retail-expansion)"
 )
 
+st.markdown(
+    "🔗 **Find out my CV:** "
+    "[github.com/nisamelia/retail-expansion]"
+    "(https://drive.google.com/file/d/1sa14j-L3tioraYqTcS8n1wPE6pwv9D_A/view?usp=sharing)"
+)
+
 # =========================================================
 # LOAD DATA (OPTIMIZED & DEPLOY-SAFE)
 # =========================================================
