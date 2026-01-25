@@ -21,7 +21,7 @@ st.markdown(
 
 st.markdown(
     "🔗 **Find out my CV:** "
-    "[github.com/nisamelia/retail-expansion]"
+    "[Nisa Amelia's CV]"
     "(https://drive.google.com/file/d/1sa14j-L3tioraYqTcS8n1wPE6pwv9D_A/view?usp=sharing)"
 )
 
