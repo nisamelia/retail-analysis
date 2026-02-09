@@ -264,7 +264,7 @@ view = pdk.ViewState(
 deck = pdk.Deck(
     layers=[layer],
     initial_view_state=view,
-    map_style="https://basemaps.cartocdn.com/gl/esri-world-imagery-gl-style/style.json",  # ← OpenStreetMap default (NO TOKEN)
+    map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",  # ← OpenStreetMap default (NO TOKEN)
     tooltip={"html": tooltip_html}
 )
 
